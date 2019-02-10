@@ -3,7 +3,8 @@
 This repo contains the Annotated and unannotated version of “NotepadCrypt format decrypter”.
 
 To compile from terminal, following command needs to be passed :
- javac -processor signedness DecryptNotepadCrypt.java
+
+ javac -processor signedness /home/kartik/Desktop/gsoc/DecryptNotepadCrypt.java
 
 By running the command for annotated code- 1 warning and 1 error is occuring:
 
