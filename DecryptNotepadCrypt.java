@@ -32,6 +32,7 @@ import java.util.Arrays;
 import static java.lang.Integer.rotateRight;
 import org.checkerframework.checker.signedness.qual.*;
 
+
 public final class DecryptNotepadCrypt {
 	
 	/*---- Main functions ----*/
@@ -55,20 +56,30 @@ public final class DecryptNotepadCrypt {
 		File inputFile = new File(args[0]);
 		
 		// Read, decrypt, write
-		byte[] data = Files.readAllBytes(inputFile.toPath());
-		byte[] plaintext;
+
+		/* Signedness checker right now not supports Files in java. This class need to be annotated.
+		   Here function readAllBytes returns signed value therefore error occurs, hence suppressed the error. */
+		@SuppressWarnings("signedness")
+		@Unsigned byte[] data = Files.readAllBytes(inputFile.toPath());
+		@Unsigned byte[] plaintext;
 		try {
-			plaintext = decryptFileData(data, passphrase.getBytes("US-ASCII"), useMasterKey);
+			/* getBytes has return type as signed and we need unsigned */
+			@SuppressWarnings("signedness")
+			@Unsigned byte[] plain = decryptFileData(data, passphrase.getBytes("US-ASCII"), useMasterKey);
+			plaintext = plain;
 		} catch (IllegalArgumentException e) {
 			System.err.println("Error: " + e.getMessage());
 			System.exit(1);
 			return;
 		}
-		System.out.write(plaintext);
+		/* Did this because System.out.write() was unable to write unsigned plaintext */
+		@SuppressWarnings("signedness")
+		byte[] plaintext2 = plaintext;
+		System.out.write(plaintext2);
 	}
 	
 	
-	static byte[] decryptFileData(byte[] fileData, byte[] passphrase, boolean useMasterKey) {
+	static @Unsigned byte[] decryptFileData(@Unsigned byte[] fileData, @Unsigned byte[] passphrase, boolean useMasterKey) {
 		if (fileData.length == 0)
 			return fileData;  // NotepadCrypt produces an empty file when trying to encrypt an empty text file
 		
@@ -88,14 +99,27 @@ public final class DecryptNotepadCrypt {
 		}
 		
 		// Decrypt text
-		byte[] cipherKey = getSha256Hash(passphrase);
-		byte[] initVec = Arrays.copyOfRange(fileData, 8, 24);
+		@Unsigned byte[] cipherKey = getSha256Hash(passphrase);
+		/* function takes parameter as signed value but here filedata is unsigned 
+		   and copyOfRange return type is also signed 
+		   therefore error needs to be suppressed.*/
+		@SuppressWarnings("signedness")
+		@Unsigned byte[] initVec = Arrays.copyOfRange(fileData, 8, 24);
+		/* function takes parameter as signed value but here filedata is unsigned therefore needs to be suppressed.*/
+		@SuppressWarnings("signedness")
 		byte[] ciphertext = Arrays.copyOfRange(fileData, hasMasterKey ? 72 : 24, fileData.length);
 		if (useMasterKey) {
 			if (!hasMasterKey)
 				throw new IllegalArgumentException("Master key mode requested on file data with no master key");
-			byte[] iv = Arrays.copyOfRange(fileData, 24, 40);
-			byte[] fileKey = Arrays.copyOfRange(fileData, 40, 72);
+			/* function takes parameter as signed value but here filedata is unsigned 
+			   and copyOfRange return type is also signed 
+			   therefore error needs to be suppressed.*/
+			@SuppressWarnings("signedness")
+			@Unsigned byte[] iv = Arrays.copyOfRange(fileData, 24, 40);
+			/* copyOfRange return is a signed value therefore it is producing warning 
+		       thats why suppressed it. It shows that Arrays class need to be annotated into signedness checker */
+			@SuppressWarnings("signedness")
+			@Unsigned byte[] fileKey = Arrays.copyOfRange(fileData, 40, 72);
 			Aes.decryptCbcMode(fileKey, cipherKey, iv);
 			cipherKey = fileKey;
 		}
@@ -105,11 +129,14 @@ public final class DecryptNotepadCrypt {
 	
 	/*---- Utility functions ----*/
 	
-	private static byte[] decryptWithPadding(byte[] ciphertext, byte[] key, byte[] initVec) {
+	private static @Unsigned byte[] decryptWithPadding(byte[] ciphertext, @Unsigned byte[] key, @Unsigned byte[] initVec) {
 		// Decrypt message
 		if (ciphertext.length % 16 != 0)
 			throw new IllegalArgumentException("Invalid file length");
-		byte[] plaintext = ciphertext.clone();
+		/* clone is function of array class which signedness checker not supports right now
+		   therefore it is producing warning hence suppressed it */
+		@SuppressWarnings("signedness")
+		@Unsigned byte[] plaintext = ciphertext.clone();
 		Aes.decryptCbcMode(plaintext, key, initVec);
 		
 		// Check padding (rejections are always correct, but false acceptance has 1/255 chance)
@@ -122,11 +149,16 @@ public final class DecryptNotepadCrypt {
 		}
 		
 		// Strip padding
-		return Arrays.copyOfRange(plaintext, 0, plaintext.length - padding);
+		/* Arrays class is not annotated therefore copyOfRange function requires Signed parameter
+		   but here plaintext needs to be unsigned ,and also Arrays.copyOfRange returns signed value which needs to be unsigned 
+		   therefore suppressed it. */
+		@SuppressWarnings("signedness")
+		@Unsigned byte range[]=Arrays.copyOfRange(plaintext, 0, plaintext.length - padding);
+		return range;
 	}
 	
 	
-	static int toInt32(byte[] b, int off) {  // Big endian
+	static @Unsigned int toInt32(@Unsigned byte[] b, int off) {  // Big endian
 		return (b[off + 0] & 0xFF) << 24 |
 		       (b[off + 1] & 0xFF) << 16 |
 		       (b[off + 2] & 0xFF) <<  8 |
@@ -135,17 +167,24 @@ public final class DecryptNotepadCrypt {
 	
 	
 	/*---- Cryptography library functions ----*/
-	@SuppressWarnings("signedness")
-	private static byte[] getSha256Hash(byte[] msg) {
-
-		if (msg.length > Integer.MAX_VALUE / 8)
+	
+	private static @Unsigned byte[] getSha256Hash(@Unsigned byte[] msg) {
+        int len=msg.length;
+		if (len > Integer.MAX_VALUE / 8)
 			throw new IllegalArgumentException("Message too large for this implementation");
 		
 		// Add 1 byte for termination, 8 bytes for length, then round up to multiple of block size (64)
-		byte[] padded = Arrays.copyOf(msg, (msg.length + 1 + 8 + 63) / 64 * 64);
-		padded[msg.length] = (byte)0x80;
+
+		/* return type of copyOf is signed and it takes parameter also as signed
+		   but here msg is unsigned therefore producing error hence suppressed. */
+		@SuppressWarnings("signedness")
+		@Unsigned byte[] padded = Arrays.copyOf(msg, (len+ 1 + 8 + 63) / 64 * 64);
+		/* "@IntVal(128) int" may not be casted to the type "@IntVal(-128) byte" warning is suppressed*/
+		@SuppressWarnings("value")
+		byte q=(byte)0x80;
+		padded[msg.length] = q;
 		for (int i = 0; i < 4; i++)
-			padded[padded.length - 1 - i] = (byte)((msg.length * 8) >>> (i * 8));
+			padded[padded.length - 1 - i] = (byte)((len * 8) >>> (i * 8));
 		
 		// Table of round constants
 		final int[] K = {
@@ -160,24 +199,36 @@ public final class DecryptNotepadCrypt {
 		};
 		
 		// Compress each block
-		int[] state = {0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19};
+
+		@Unsigned int[] state = {0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19};
 		for (int off = 0; off < padded.length; off += 64) {
-			int[] schedule = new int[64];
+			@Unsigned int[] schedule = new int[64];
 			for (int i = 0; i < 16; i++)
 				schedule[i] = toInt32(padded, off + i * 4);
 			for (int i = 16; i < 64; i++) {
-				int x = schedule[i - 15];
-				int y = schedule[i -  2];
-				schedule[i] = schedule[i - 16] + schedule[i - 7] +
-				              (rotateRight(x,  7) ^ rotateRight(x, 18) ^ (x >>>  3)) +
-				              (rotateRight(y, 17) ^ rotateRight(y, 19) ^ (y >>> 10));
+				@Unsigned int x = schedule[i - 15];
+				@Unsigned int y = schedule[i -  2];
+				/* Unsigned operation is happening on x and y and
+				   on the same time rotateRight function is called of Integer class
+				   which takes signed number as parameter and
+				   right now Signedness checker does not support it, it should be annotated,
+				   therefore suppressed the warning. */ 
+				@SuppressWarnings("signedness")
+				@Unsigned int p = (rotateRight(x,  7) ^ rotateRight(x, 18) ^ (x >>>  3)) +
+				                  (rotateRight(y, 17) ^ rotateRight(y, 19) ^ (y >>> 10));
+				schedule[i] = schedule[i - 16] + schedule[i - 7] + p;
 			}
 			
-			int a = state[0], b = state[1], c = state[2], d = state[3];
-			int e = state[4], f = state[5], g = state[6], h = state[7];
+			@Unsigned int a = state[0], b = state[1], c = state[2], d = state[3];
+			@Unsigned int e = state[4], f = state[5], g = state[6], h = state[7];
 			for (int i = 0; i < 64; i++) {
-				int t1 = h + (rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + schedule[i];
-				int t2 = (rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+				/* Same reason as of line no. 211 to 215. */
+				@SuppressWarnings("signedness")
+				@Unsigned int t1 = h + (rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)) + ((e & f) ^ (~e & g)) + K[i];
+				t1 = t1 + schedule[i];
+				/* Same reason as of line no. 211 to 215. */
+				@SuppressWarnings("signedness")
+				@Unsigned int t2 = (rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
 				h = g;
 				g = f;
 				f = e;
@@ -192,7 +243,7 @@ public final class DecryptNotepadCrypt {
 		}
 		
 		// Serialize state as result
-		byte[] hash = new byte[state.length * 4];
+		@Unsigned byte[] hash = new byte[state.length * 4];
 		for (int i = 0; i < hash.length; i++)
 			hash[i] = (byte)(state[i / 4] >>> ((3 - i % 4) * 8));
 		return hash;
@@ -207,14 +258,18 @@ final class Aes {
 	private static final int BLOCK_LEN = 16;  // Do not modify
 	
 	
-	public static void decryptCbcMode(byte[] msg, byte[] key, byte[] initVec) {
+	public static void decryptCbcMode(@Unsigned byte[] msg, @Unsigned byte[] key, @Unsigned byte[] initVec) {
 		if (msg.length % BLOCK_LEN != 0 || initVec.length != BLOCK_LEN)
 			throw new IllegalArgumentException("Message is not a multiple of block length");
 		
 		Aes cipher = new Aes(key);
-		byte[] prevCiphertextBlock = initVec;
+		@Unsigned byte[] prevCiphertextBlock = initVec;
 		for (int off = 0; off < msg.length; off += BLOCK_LEN) {
-			byte[] curCiphertextBlock = Arrays.copyOfRange(msg, off, off + BLOCK_LEN);
+			/*copyOfRange function requires Signed parameter
+			  but here msg needs to be unsigned which arises an error 
+			  therefore suppressed it. */
+			@SuppressWarnings("signedness")
+			@Unsigned byte[] curCiphertextBlock = Arrays.copyOfRange(msg, off, off + BLOCK_LEN);
 			cipher.decryptBlock(msg, off);
 			for (int i = 0; i < BLOCK_LEN; i++)
 				msg[off + i] ^= prevCiphertextBlock[i];
@@ -223,10 +278,10 @@ final class Aes {
 	}
 	
 	
-	@Unsigned private byte[][] keySchedule;
+	private @Unsigned byte[][] keySchedule;
 	
-	@SuppressWarnings("signedness")
-	public Aes(byte[] key) {
+	
+	public Aes(@Unsigned byte[] key) {
 		if (key.length < 4 || key.length % 4 != 0)
 			throw new IllegalArgumentException("Invalid key length");
 		
@@ -236,11 +291,16 @@ final class Aes {
 		@Unsigned int[] w = new int[(rounds + 1) * 4];  // Key schedule
 		for (int i = 0; i < nk; i++)
 			w[i] = DecryptNotepadCrypt.toInt32(key, i * 4);
-		byte rcon = 1;
+		@Unsigned byte rcon = 1;
 		for (int i = nk; i < w.length; i++) {  // rcon = 2^(i/nk) mod 0x11B
-			int tp = w[i - 1];
+			@Unsigned int tp = w[i - 1];
 			if (i % nk == 0) {
-				tp = subInt32Bytes(rotateRight(tp, 24)) ^ (rcon << 24);
+				/* rotateRight take signed value as parameter but here tp is unsigned
+				   and it returns also signed value which should be unsigned here,
+				   therefore suppressed the error.*/
+				@SuppressWarnings("signedness")
+				@Unsigned int l= subInt32Bytes(rotateRight(tp, 24));
+				tp = l ^ (rcon << 24);
 				rcon = multiply(rcon, (byte)0x02);
 			} else if (nk > 6 && i % nk == 4)
 				tp = subInt32Bytes(tp);
@@ -255,8 +315,11 @@ final class Aes {
 	}
 	
 	
-	public void decryptBlock(byte[] msg, int off) {
+	public void decryptBlock(@Unsigned byte[] msg, int off) {
 		// Initial round
+		/* copyOfRange function requires Signed parameter and also returnes signed value,
+		   but we need Unsigned here therefore suppressed it */
+		@SuppressWarnings("signedness")
 		@Unsigned byte[] temp0 = Arrays.copyOfRange(msg, off, off + BLOCK_LEN);
 		addRoundKey(temp0, keySchedule[keySchedule.length - 1]);
 		@Unsigned byte[] temp1 = new byte[BLOCK_LEN];
@@ -297,8 +360,8 @@ final class Aes {
 	
 	/* Utilities */
 	
-	@Unsigned private static byte[] SBOX = new byte[256];
-	@Unsigned private static byte[] SBOX_INVERSE = new byte[256];
+	private static @Unsigned byte[] SBOX = new byte[256];
+	private static @Unsigned byte[] SBOX_INVERSE = new byte[256];
 	
 	// Initialize the S-box and inverse
 	static {
@@ -310,11 +373,12 @@ final class Aes {
 		}
 	}
 	
-	private static @Unsigned byte multiply(@Unsigned byte x,@Unsigned byte y) {
+	
+	private static @Unsigned byte multiply(@Unsigned byte x, @Unsigned byte y) {
 		// Russian peasant multiplication
 		@Unsigned byte z = 0;
 		for (int i = 0; i < 8; i++) {
-			z ^= x * (y >>> i & 1);
+			z ^= x * ((y >>> i) & 1);
 			x = (byte)((x << 1) ^ (((x >>> 7) & 1) * 0x11B));
 		}
 		return z;
@@ -347,4 +411,5 @@ final class Aes {
 		       (SBOX[x >>>  8 & 0xFF] & 0xFF) <<  8 |
 		       (SBOX[x >>>  0 & 0xFF] & 0xFF) <<  0;
 	}
+	
 }
