@@ -14,7 +14,7 @@ In this case study I learnt that signedness checker is weak in some classes and 
 
 3.)java.nio.file.Files
 
-and I think many more.
+and I think many more too.
 
 Due to this errors came and in someplaces I had to @SuppressWarnings. I would not have found these problems in signedness checker without doing this case study.
 Will further analyze this checker where it needs more enhancements.
